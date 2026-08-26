@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'team@backstage-beguna.app';
+    }
+
+    match /topics/{topicId} {
+      // Die Themenliste darf von allen Personen mit dem Link gelesen werden.
+      allow read: if true;
+
+      // Nur der gemeinsame Backoffice-Nutzer darf Themen anlegen oder löschen.
+      allow create, delete: if isAdmin();
+
+      // Backoffice darf verwalten. Besucher dürfen ausschließlich ein freies
+      // Thema einmalig mit einem Namen sichern. Freigeben ist nur im Backoffice möglich.
+      allow update: if isAdmin() || (
+        resource.data.status == 'frei'
+        && request.resource.data.status == 'blockiert'
+        && request.resource.data.claimedBy is string
+        && request.resource.data.claimedBy.size() >= 2
+        && request.resource.data.claimedBy.size() <= 60
+        && request.resource.data.claimedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'claimedBy', 'claimedAt'])
+      );
+    }
+  }
+}
