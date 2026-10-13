@@ -175,6 +175,28 @@
     }
 
     .claim-row { display: flex; gap: 8px; }
+    .claim-form { display: grid; gap: 12px; }
+    .ack {
+      display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start;
+      padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line);
+      font-size: 14px; line-height: 1.45; color: var(--ink); cursor: pointer;
+    }
+    .ack input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--teal); }
+    .ack .ack-deadline { display: block; margin-top: 4px; color: var(--ink-soft); font-size: 13px; }
+    .ack.missing { border-color: var(--rust); background: var(--rust-bg); }
+    .ack-error { margin: -4px 0 0; color: var(--rust); font-size: 13px; }
+    .btn-dropbox {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 46px; padding: 0 18px; border-radius: 12px; text-decoration: none;
+      background: #0061FE; color: #fff; font-weight: 600; font-size: 15px;
+    }
+    .btn-dropbox:hover { background: #0050D6; }
+    .btn-dropbox svg { width: 18px; height: 18px; flex: none; }
+    .upload-note { margin: 0; font-size: 13px; color: var(--ink-soft); }
+    .claimed-block:has(.upload) { flex-wrap: wrap; }
+    .claimed-block .upload { display: grid; gap: 8px; margin-top: 12px; flex-basis: 100%; width: 100%; }
+    .link-edit { display: flex; gap: 6px; margin-top: 8px; }
+    .link-edit input { flex: 1; min-width: 0; margin: 0 !important; }
 
     input, textarea {
       width: 100%;
@@ -428,6 +450,38 @@
       return rows.length ? `<div class="meta">${rows.join("")}</div>` : "";
     }
 
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/"/g, "&quot;");
+    }
+
+    function safeUrl(value) {
+      try {
+        const url = new URL(String(value || "").trim());
+        return url.protocol === "https:" ? url.href : "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    const DROPBOX_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M6 2 0 6l6 4 6-4zm12 0-6 4 6 4 6-4zM0 14l6 4 6-4-6-4zm18-4-6 4 6 4 6-4zM6 19.3 12 23l6-3.7-6-3.9z"/></svg>`;
+
+    function uploadBlock(topic) {
+      const url = safeUrl(topic.dropboxUrl);
+      if (!url) return "";
+      return `
+        <div class="upload">
+          <a class="btn-dropbox" href="${escapeAttr(url)}" target="_blank" rel="noopener">${DROPBOX_ICON}Video in Dropbox hochladen</a>
+          ${topic.deadline ? `<p class="upload-note">Bitte bis zur Frist hochladen: ${escapeHtml(topic.deadline)}</p>` : ""}
+        </div>`;
+    }
+
+    window.clearAck = function (id) {
+      const box = document.getElementById(`ackbox-${id}`);
+      const err = document.getElementById(`ackerr-${id}`);
+      if (box) box.classList.remove("missing");
+      if (err) err.hidden = true;
+    };
+
     function renderTopics() {
       const element = document.getElementById("topics");
       if (!topics.length) {
@@ -448,15 +502,22 @@
           ${topic.scriptText ? `<p class="script-label">Das sollst du sagen</p><p class="script-text">${escapeHtml(topic.scriptText)}</p>` : ""}`;
 
         if (topic.status === "blockiert") {
-          return `<article class="topic">${common}<div class="claimed-block"><div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div></div></article>`;
+          return `<article class="topic">${common}<div class="claimed-block"><div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div>${uploadBlock(topic)}</div></article>`;
         }
 
         return `
           <article class="topic">
             ${common}
-            <div class="claim-row">
-              <input type="text" maxlength="60" autocomplete="name" placeholder="Dein Name" aria-label="Dein Name für ${escapeHtml(topic.title)}" id="name-${topic.id}">
-              <button class="btn-secure" type="button" id="claim-${topic.id}" onclick="secureTopic('${topic.id}')">Sichern</button>
+            <div class="claim-form">
+              <label class="ack" id="ackbox-${topic.id}" for="ack-${topic.id}">
+                <input type="checkbox" id="ack-${topic.id}" onchange="clearAck('${topic.id}')">
+                <span>Ich habe zur Kenntnis genommen, dass ich das Video bis zum angegebenen Zeitpunkt hochladen werde.${topic.deadline ? `<span class="ack-deadline">Frist: ${escapeHtml(topic.deadline)}</span>` : ""}</span>
+              </label>
+              <p class="ack-error" id="ackerr-${topic.id}" role="alert" hidden>Bitte bestätige zuerst, dass du das Video rechtzeitig hochlädst.</p>
+              <div class="claim-row">
+                <input type="text" maxlength="60" autocomplete="name" placeholder="Dein Name" aria-label="Dein Name für ${escapeHtml(topic.title)}" id="name-${topic.id}">
+                <button class="btn-secure" type="button" id="claim-${topic.id}" onclick="secureTopic('${topic.id}')">Sichern</button>
+              </div>
             </div>
           </article>`;
       }).join("");
@@ -467,6 +528,14 @@
       const input = document.getElementById(`name-${id}`);
       const button = document.getElementById(`claim-${id}`);
       const name = input.value.trim();
+      const ack = document.getElementById(`ack-${id}`);
+
+      if (!ack || !ack.checked) {
+        document.getElementById(`ackbox-${id}`).classList.add("missing");
+        document.getElementById(`ackerr-${id}`).hidden = false;
+        if (ack) ack.focus();
+        return;
+      }
 
       if (name.length < 2) {
         input.focus();
@@ -531,13 +600,18 @@
         deadline: document.getElementById("newDeadline"),
         scriptText: document.getElementById("newScript"),
         storeName: document.getElementById("newStore"),
-        address: document.getElementById("newAddress")
+        address: document.getElementById("newAddress"),
+        dropboxUrl: document.getElementById("newDropbox")
       };
       const values = Object.fromEntries(Object.entries(fields).map(([key, element]) => [key, element.value.trim()]));
 
       if (!values.title) return fields.title.focus();
       if (!values.deadline) return fields.deadline.focus();
       if (!values.scriptText) return fields.scriptText.focus();
+      if (values.dropboxUrl && !safeUrl(values.dropboxUrl)) {
+        alert("Der Dropbox-Link muss mit https:// beginnen.");
+        return fields.dropboxUrl.focus();
+      }
 
       const button = document.getElementById("addTopicBtn");
       button.disabled = true;
@@ -557,6 +631,23 @@
       } finally {
         button.disabled = false;
         button.textContent = "Thema hinzufügen";
+      }
+    };
+
+    window.saveDropbox = async function (id) {
+      const input = document.getElementById(`dbx-${id}`);
+      const value = input.value.trim();
+      if (value && !safeUrl(value)) {
+        alert("Der Dropbox-Link muss mit https:// beginnen.");
+        return input.focus();
+      }
+      try {
+        await updateDoc(doc(db, "topics", id), { dropboxUrl: value });
+        input.style.outline = "2px solid #6FCF97";
+        setTimeout(() => { input.style.outline = ""; }, 1200);
+      } catch (error) {
+        console.error(error);
+        alert("Der Link konnte nicht gespeichert werden.");
       }
     };
 
@@ -627,6 +718,9 @@
           <label for="newAddress">Adresse (optional)</label>
           <input type="text" id="newAddress" maxlength="240" placeholder="Straße, Hausnummer, Ort">
 
+          <label for="newDropbox">Dropbox-Link zum Hochladen</label>
+          <input type="url" id="newDropbox" maxlength="500" inputmode="url" autocapitalize="off" placeholder="https://www.dropbox.com/request/…">
+
           <button class="btn-primary" id="addTopicBtn" type="button" onclick="addTopic()">Thema hinzufügen</button>
 
           <div class="admin-list">
@@ -638,6 +732,10 @@
                   ${topic.status === "blockiert" ? `<button class="icon-btn" type="button" onclick="releaseTopic('${topic.id}')">Freigeben</button>` : ""}
                   <button class="icon-btn" type="button" onclick="deleteTopic('${topic.id}')">Löschen</button>
                 </span>
+              </div>
+              <div class="link-edit">
+                <input type="url" id="dbx-${topic.id}" maxlength="500" inputmode="url" autocapitalize="off" aria-label="Dropbox-Link für ${escapeHtml(topic.title)}" placeholder="Dropbox-Link einfügen" value="${escapeAttr(topic.dropboxUrl || "")}">
+                <button class="icon-btn" type="button" onclick="saveDropbox('${topic.id}')">Link speichern</button>
               </div>`).join("") || `<p class="lock-note">Noch keine Themen vorhanden.</p>`}
           </div>
         </section>`;
