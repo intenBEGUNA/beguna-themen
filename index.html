@@ -263,7 +263,18 @@
     .cal-form { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
     .cal-form label { display: block; margin: 10px 0 5px; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; }
     .cal-form label:first-child { margin-top: 0; }
-    .cal-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cal-times { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+    .cal-times > div { min-width: 0; }
+    .cal-times input[type="time"], input[type="datetime-local"] {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      min-height: 48px;
+      -webkit-appearance: none;
+      appearance: none;
+      text-align: left;
+    }
+    input::-webkit-date-and-time-value { text-align: left; }
     .cal-error { min-height: 18px; margin: 8px 0 0; color: var(--rust); font-size: 13px; }
     .cal-submit { width: 100%; margin-top: 4px; }
 
