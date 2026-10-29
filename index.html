@@ -152,15 +152,15 @@
       padding: 12px 22px;
       border: 0;
       border-radius: 980px;
-      background: var(--blue);
-      color: var(--on-blue);
+      background: var(--plus-bg);
+      color: var(--plus-fg);
       font-size: 17px;
       font-weight: 400;
       cursor: pointer;
-      transition: background .2s ease;
+      transition: opacity .2s ease;
     }
-    .pill:hover { background: var(--blue-hover); }
-    .link-more { min-height: 44px; padding: 0; border: 0; background: none; color: var(--link); font-size: 17px; font-weight: 400; cursor: pointer; }
+    .pill:hover { opacity: .85; }
+    .link-more { min-height: 44px; padding: 0; border: 0; background: none; color: var(--text); font-size: 17px; font-weight: 400; cursor: pointer; }
     .link-more:hover { text-decoration: underline; }
 
     main { padding: 0; }
@@ -210,7 +210,7 @@
       letter-spacing: -.025em;
       overflow-wrap: anywhere;
     }
-    .topic.unavailable .topic-toggle h3 { color: var(--text-3); }
+    .topic.unavailable .topic-toggle h3 { color: var(--text-2); }
     .badge {
       grid-area: status;
       justify-self: end;
@@ -226,7 +226,7 @@
     }
     .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .badge.frei { color: var(--green); }
-    .badge.blockiert { color: var(--text-3); }
+    .badge.blockiert { color: var(--text-2); }
     .chevron {
       grid-area: plus;
       flex: none;
@@ -455,9 +455,21 @@
     @media (max-width: 480px) {
       .nav-inner { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
       .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-      .hero { padding-block: 44px 40px; }
-      .topic-toggle { padding: 20px 16px 20px 20px; min-height: 84px; column-gap: 10px; }
-      .topic-toggle h3 { font-size: 19px; }
+      .hero { padding-block: 26px 28px; }
+      .eyebrow { margin-bottom: 6px; font-size: 15px; }
+      .hero h1 { font-size: 40px; }
+      .hero-sub { margin-top: 8px; font-size: 19px; }
+      .hero-stats { margin-top: 10px; }
+      .hero-cta { margin-top: 16px; gap: 10px 22px; }
+      .pill { min-height: 44px; padding: 10px 20px; font-size: 16px; }
+      .link-more { font-size: 16px; }
+      .section-title { margin-bottom: 16px; font-size: 30px; }
+      #topics:not(.empty):not(.loading):not(.error) { gap: 10px; }
+      .topic { border-radius: 20px; }
+      .topic-toggle { padding: 14px 14px 14px 18px; min-height: 64px; column-gap: 10px; }
+      .topic-toggle:focus-visible { border-radius: 20px; }
+      .topic-toggle h3 { font-size: 17px; line-height: 1.25; }
+      .topic-body { padding: 0 18px 20px; }
       .badge { font-size: 13px; gap: 6px; }
       .chevron { width: 32px; height: 32px; padding: 8px; }
       .topic-body { padding: 0 22px 24px; }
