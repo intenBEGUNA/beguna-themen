@@ -23,8 +23,10 @@ service cloud.firestore {
         && request.resource.data.claimedBy.size() >= 2
         && request.resource.data.claimedBy.size() <= 60
         && request.resource.data.claimedAt == request.time
+        // Fester Termin: Kostenübernahme bei Nichterscheinen muss bestätigt sein.
+        && (!('fixedAt' in resource.data) || request.resource.data.costAccepted == true)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'claimedBy', 'claimedAt'])
+          .hasOnly(['status', 'claimedBy', 'claimedAt', 'costAccepted'])
       );
     }
 

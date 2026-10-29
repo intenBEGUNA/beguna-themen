@@ -452,6 +452,36 @@
     .cal-error { min-height: 18px; margin: 10px 0 0; color: var(--red); font-size: 13px; }
     .cal-submit { margin-top: 8px; }
 
+    /* Fester Termin */
+    .topic-title { grid-area: title; min-width: 0; }
+    .fixed-line {
+      display: block;
+      margin-top: 4px;
+      color: var(--eyebrow);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: -.01em;
+    }
+    .fixed-box {
+      display: grid;
+      gap: 6px;
+      margin: 0 0 22px;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: var(--plus-bg);
+      color: var(--plus-fg);
+    }
+    .fixed-box .fixed-kicker { font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; opacity: .7; }
+    .fixed-box .fixed-when { font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
+    .fixed-box .fixed-where { font-size: 15px; line-height: 1.4; opacity: .85; overflow-wrap: anywhere; }
+    .fixed-box .fixed-where a { color: inherit; text-decoration: underline; }
+    .ack.cost { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); }
+    .ack.cost.missing { box-shadow: inset 0 0 0 1.5px var(--red); }
+    .admin-check { display: flex; align-items: center; gap: 10px; margin: 18px 0 0; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .admin-check input { width: 22px; height: 22px; margin: 0; accent-color: var(--blue); }
+    .admin-panel .admin-check { color: var(--text); }
+    .admin-list-item .st.ok { color: var(--green); }
+
     @media (max-width: 480px) {
       .nav-inner { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
       .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -629,6 +659,35 @@
       return topics.filter(isExpired).map((topic) => topic.id).join(",");
     }
 
+    function fixedDate(topic) {
+      const value = topic.fixedAt;
+      if (!value) return null;
+      const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    }
+
+    function formatFixed(date, long) {
+      const day = date.toLocaleDateString("de-DE", long
+        ? { weekday: "long", day: "numeric", month: "long" }
+        : { weekday: "short", day: "2-digit", month: "2-digit" });
+      const time = date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+      return `${day}, ${time} Uhr`;
+    }
+
+    function fixedBox(topic) {
+      const date = fixedDate(topic);
+      if (!date) return "";
+      const place = topic.address
+        ? `<a href="${mapsUrl(topic.address)}" target="_blank" rel="noopener">${escapeHtml(topic.address)}</a>`
+        : (topic.storeName ? escapeHtml(topic.storeName) : "");
+      return `
+        <div class="fixed-box">
+          <span class="fixed-kicker">Fester Termin · nicht verhandelbar</span>
+          <span class="fixed-when">${formatFixed(date, true)}</span>
+          ${place ? `<span class="fixed-where">Du musst pünktlich hier sein: ${place}</span>` : ""}
+        </div>`;
+    }
+
     const TOO_LATE = `<p class="too-late" role="status">Leider zu spät – die Frist ist abgelaufen.</p>`;
     const CHEVRON = `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`;
 
@@ -700,6 +759,13 @@
       document.getElementById(`body-${id}`).hidden = !open;
     };
 
+    window.clearCost = function (id) {
+      const box = document.getElementById(`costbox-${id}`);
+      const err = document.getElementById(`costerr-${id}`);
+      if (box) box.classList.remove("missing");
+      if (err) err.hidden = true;
+    };
+
     window.clearAck = function (id) {
       const box = document.getElementById(`ackbox-${id}`);
       const err = document.getElementById(`ackerr-${id}`);
@@ -732,7 +798,9 @@
       element.innerHTML = topics.map((topic) => {
         const available = isAvailable(topic);
         const open = openTopics.has(topic.id);
+        const fixed = fixedDate(topic);
         const details = `
+          ${fixedBox(topic)}
           ${formatTopicMeta(topic)}
           ${topic.scriptText ? `<p class="script-label">Das sollst du sagen</p><p class="script-text">${escapeHtml(topic.scriptText)}</p>` : ""}`;
 
@@ -748,7 +816,10 @@
         return `
           <article class="topic ${open ? "open" : ""} ${available ? "" : "unavailable"}" id="topic-${topic.id}">
             <button class="topic-toggle" type="button" aria-expanded="${open}" aria-controls="body-${topic.id}" onclick="toggleTopic('${topic.id}')">
-              <h3>${escapeHtml(topic.title)}</h3>
+              <span class="topic-title">
+                <h3>${escapeHtml(topic.title)}</h3>
+                ${fixed ? `<span class="fixed-line">Fester Termin · ${formatFixed(fixed, false)}</span>` : ""}
+              </span>
               <span class="badge ${available ? "frei" : "blockiert"}">${available ? "Frei" : "Nicht verfügbar"}</span>
               ${CHEVRON}
             </button>
@@ -770,6 +841,12 @@
                 <span>Ich habe zur Kenntnis genommen, dass ich das Video bis zum angegebenen Zeitpunkt hochladen werde.${label ? `<span class="ack-deadline">Frist: ${escapeHtml(label)}</span>` : ""}</span>
               </label>
               <p class="ack-error" id="ackerr-${topic.id}" role="alert" hidden>Bitte bestätige zuerst, dass du das Video rechtzeitig hochlädst.</p>
+              ${fixedDate(topic) ? `
+              <label class="ack cost" id="costbox-${topic.id}" for="cost-${topic.id}">
+                <input type="checkbox" id="cost-${topic.id}" onchange="clearCost('${topic.id}')">
+                <span>Ich bestätige: Sollte ich zum festen Termin nicht erscheinen, trage ich die dadurch entstehenden Kosten.<span class="ack-deadline">Termin: ${formatFixed(fixedDate(topic), true)}</span></span>
+              </label>
+              <p class="ack-error" id="costerr-${topic.id}" role="alert" hidden>Bitte bestätige auch die Kostenübernahme bei Nichterscheinen.</p>` : ""}
               <div class="claim-row">
                 <input type="text" maxlength="60" autocomplete="name" placeholder="Dein Name" aria-label="Dein Name für ${escapeHtml(topic.title)}" id="name-${topic.id}">
                 <button class="btn-secure" type="button" id="claim-${topic.id}" onclick="secureTopic('${topic.id}')">Sichern</button>
@@ -787,6 +864,16 @@
         document.getElementById(`ackbox-${id}`).classList.add("missing");
         document.getElementById(`ackerr-${id}`).hidden = false;
         if (ack) ack.focus();
+        return;
+      }
+
+      const topicNow = topics.find((t) => t.id === id) || {};
+      const isFixed = !!fixedDate(topicNow);
+      const cost = document.getElementById(`cost-${id}`);
+      if (isFixed && (!cost || !cost.checked)) {
+        document.getElementById(`costbox-${id}`).classList.add("missing");
+        document.getElementById(`costerr-${id}`).hidden = false;
+        if (cost) cost.focus();
         return;
       }
 
@@ -809,11 +896,9 @@
           if (isExpired(snapshot.data())) {
             throw new Error("too-late");
           }
-          transaction.update(topicRef, {
-            status: "blockiert",
-            claimedBy: name,
-            claimedAt: serverTimestamp()
-          });
+          const claim = { status: "blockiert", claimedBy: name, claimedAt: serverTimestamp() };
+          if (fixedDate(snapshot.data())) claim.costAccepted = true;
+          transaction.update(topicRef, claim);
         });
       } catch (error) {
         console.error(error);
@@ -836,7 +921,8 @@
         await updateDoc(doc(db, "topics", id), {
           status: "frei",
           claimedBy: "",
-          claimedAt: deleteField()
+          claimedAt: deleteField(),
+          costAccepted: deleteField()
         });
       } catch (error) {
         console.error(error);
@@ -867,8 +953,17 @@
       const deadlineInput = document.getElementById("newDeadlineAt");
       const deadlineAt = deadlineInput.value ? new Date(deadlineInput.value) : null;
 
+      const fixedCheck = document.getElementById("newFixed");
+      const fixedInput = document.getElementById("newFixedAt");
+      const fixedAt = fixedCheck.checked && fixedInput.value ? new Date(fixedInput.value) : null;
+
       if (!values.title) return fields.title.focus();
       if (!deadlineAt || isNaN(deadlineAt.getTime())) return deadlineInput.focus();
+      if (fixedCheck.checked && (!fixedAt || isNaN(fixedAt.getTime()))) return fixedInput.focus();
+      if (fixedCheck.checked && !values.address) {
+        alert("Bei einem festen Termin bitte die Adresse eintragen.");
+        return fields.address.focus();
+      }
       if (!values.scriptText) return fields.scriptText.focus();
       if (values.dropboxUrl && !safeUrl(values.dropboxUrl)) {
         alert("Der Dropbox-Link muss mit https:// beginnen.");
@@ -883,12 +978,16 @@
         await addDoc(topicsCol, {
           ...values,
           deadlineAt: Timestamp.fromDate(deadlineAt),
+          ...(fixedAt ? { fixedAt: Timestamp.fromDate(fixedAt) } : {}),
           status: "frei",
           claimedBy: "",
           createdAt: serverTimestamp()
         });
         Object.values(fields).forEach((field) => { field.value = ""; });
         deadlineInput.value = "";
+        fixedInput.value = "";
+        fixedCheck.checked = false;
+        document.getElementById("fixedWrap").hidden = true;
       } catch (error) {
         console.error(error);
         alert("Das Thema konnte nicht angelegt werden.");
@@ -987,6 +1086,16 @@
           <label for="newDeadlineAt">Upload möglich bis (Datum &amp; Uhrzeit) *</label>
           <input type="datetime-local" id="newDeadlineAt">
 
+          <label class="admin-check" for="newFixed">
+            <input type="checkbox" id="newFixed" onchange="document.getElementById('fixedWrap').hidden = !this.checked">
+            Fester Termin (nicht verhandelbar)
+          </label>
+          <div id="fixedWrap" hidden>
+            <label for="newFixedAt">Termin – Datum &amp; Uhrzeit *</label>
+            <input type="datetime-local" id="newFixedAt">
+            <p class="lock-note">Beim Sichern müssen Creator zusätzlich bestätigen, dass sie bei Nichterscheinen die Kosten tragen. Bitte unten die Adresse eintragen.</p>
+          </div>
+
           <label for="newDeadline">Zeitraum – Hinweistext (optional)</label>
           <input type="text" id="newDeadline" maxlength="120" placeholder="z. B. heute zwischen 12 und 16 Uhr">
 
@@ -1008,7 +1117,7 @@
             <h4>Alle Themen verwalten</h4>
             ${topics.map((topic) => `
               <div class="admin-list-item">
-                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span>${isExpired(topic) ? ` <span class="st late">· Frist abgelaufen</span>` : ""}</span>
+                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span>${fixedDate(topic) ? ` <span class="st">· fester Termin ${formatFixed(fixedDate(topic), false)}</span>` : ""}${topic.costAccepted ? ` <span class="st ok">· Kosten bestätigt</span>` : ""}${isExpired(topic) ? ` <span class="st late">· Frist abgelaufen</span>` : ""}</span>
                 <span class="admin-actions">
                   ${topic.status === "blockiert" ? `<button class="icon-btn" type="button" onclick="releaseTopic('${topic.id}')">Freigeben</button>` : ""}
                   <button class="icon-btn" type="button" onclick="deleteTopic('${topic.id}')">Löschen</button>
