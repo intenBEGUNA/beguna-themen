@@ -475,6 +475,33 @@
     .fixed-box .fixed-when { font-family: var(--font-display); font-size: 21px; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
     .fixed-box .fixed-where { font-size: 15px; line-height: 1.4; opacity: .85; overflow-wrap: anywhere; }
     .fixed-box .fixed-where a { color: inherit; text-decoration: underline; }
+    .fixed-box .fixed-client { font-size: 14px; opacity: .8; }
+    .fixed-box .fixed-penalty {
+      margin-top: 8px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--red);
+      color: #FFFFFF;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+    .fixed-box .fixed-penalty small { display: block; margin-top: 3px; font-size: 13px; font-weight: 500; opacity: .92; }
+    .verb-input { text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+    .verb-input::placeholder { text-transform: none; letter-spacing: -.01em; font-weight: 400; }
+    .countdown {
+      display: block;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--plus-bg);
+      color: var(--plus-fg);
+      font-size: 15px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .admin-list-item .st.late, .admin-list-item .st.noshow { color: var(--red); }
+    .blocked-list { margin-top: 30px; }
+    .blocked-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--hair); font-size: 15px; }
     .ack.cost { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red) 45%, transparent); }
     .ack.cost.missing { box-shadow: inset 0 0 0 1.5px var(--red); }
     .admin-check { display: flex; align-items: center; gap: 10px; margin: 18px 0 0; font-size: 15px; font-weight: 600; cursor: pointer; }
@@ -592,7 +619,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import {
       getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-      doc, serverTimestamp, runTransaction, deleteField, Timestamp
+      doc, serverTimestamp, runTransaction, deleteField, Timestamp, setDoc, arrayUnion, arrayRemove
     } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
     import {
       getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -659,6 +686,39 @@
       return topics.filter(isExpired).map((topic) => topic.id).join(",");
     }
 
+    const PENALTY_NOTICE_HOURS = 48;
+    let blockedNames = [];
+
+    function isBlocked(name) {
+      const key = String(name || "").trim().toLowerCase();
+      return !!key && blockedNames.includes(key);
+    }
+
+    function formatEuro(value) {
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0
+        ? n.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " €"
+        : "";
+    }
+
+    function countdownText(ms) {
+      const diff = ms - Date.now();
+      if (diff <= 0) return "Dein Termin ist jetzt.";
+      const mins = Math.floor(diff / 60000);
+      const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+      const parts = [];
+      if (d) parts.push(`${d} ${d === 1 ? "Tag" : "Tage"}`);
+      if (h || d) parts.push(`${h} Std.`);
+      if (!d) parts.push(`${m} Min.`);
+      return `Noch ${parts.join(" ")} bis zu deinem Termin`;
+    }
+
+    function updateCountdowns() {
+      document.querySelectorAll(".countdown[data-at]").forEach((el) => {
+        el.textContent = countdownText(Number(el.dataset.at));
+      });
+    }
+
     function fixedDate(topic) {
       const value = topic.fixedAt;
       if (!value) return null;
@@ -685,6 +745,8 @@
           <span class="fixed-kicker">Fester Termin · nicht verhandelbar</span>
           <span class="fixed-when">${formatFixed(date, true)}</span>
           ${place ? `<span class="fixed-where">Du musst pünktlich hier sein: ${place}</span>` : ""}
+          <span class="fixed-client">Dieser Termin ist dem Kunden fest zugesagt.</span>
+          ${formatEuro(topic.penalty) ? `<span class="fixed-penalty">Ausfallpauschale bei Nichterscheinen: ${formatEuro(topic.penalty)}<small>Wer einen festen Termin verpasst, bekommt keine festen Termine mehr.</small></span>` : `<span class="fixed-penalty">Nichterscheinen hat Konsequenzen.<small>Wer einen festen Termin verpasst, bekommt keine festen Termine mehr.</small></span>`}
         </div>`;
     }
 
@@ -806,7 +868,14 @@
 
         let action;
         if (topic.status === "blockiert") {
-          action = `<div class="claimed-block"><div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div>${uploadBlock(topic)}</div>`;
+          const at = topic.claimedAt && typeof topic.claimedAt.toDate === "function" ? topic.claimedAt.toDate() : null;
+          const when = at ? ` am ${at.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })} um ${at.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr` : "";
+          const stamp = fixed
+            ? `<div class="stamp">Verbindlich zugesagt von <b>${escapeHtml(topic.claimedBy)}</b>${when}</div>`
+            : `<div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div>`;
+          const countdown = fixed && fixed.getTime() > Date.now() - 3600e3
+            ? `<span class="countdown" data-at="${fixed.getTime()}">${countdownText(fixed.getTime())}</span>` : "";
+          action = `<div class="claimed-block">${stamp}${countdown}${uploadBlock(topic)}</div>`;
         } else if (isExpired(topic)) {
           action = TOO_LATE;
         } else {
@@ -844,9 +913,13 @@
               ${fixedDate(topic) ? `
               <label class="ack cost" id="costbox-${topic.id}" for="cost-${topic.id}">
                 <input type="checkbox" id="cost-${topic.id}" onchange="clearCost('${topic.id}')">
-                <span>Ich bestätige: Sollte ich zum festen Termin nicht erscheinen, trage ich die dadurch entstehenden Kosten.<span class="ack-deadline">Termin: ${formatFixed(fixedDate(topic), true)}</span></span>
+                <span>${formatEuro(topic.penalty)
+                  ? `Ich bestätige: Erscheine ich ohne Absage bis spätestens ${PENALTY_NOTICE_HOURS} Stunden vor dem Termin nicht, zahle ich eine Ausfallpauschale von ${formatEuro(topic.penalty)}.`
+                  : `Ich bestätige: Erscheine ich ohne Absage bis spätestens ${PENALTY_NOTICE_HOURS} Stunden vor dem Termin nicht, trage ich die dadurch entstehenden Kosten.`}<span class="ack-deadline">Termin: ${formatFixed(fixedDate(topic), true)}</span></span>
               </label>
-              <p class="ack-error" id="costerr-${topic.id}" role="alert" hidden>Bitte bestätige auch die Kostenübernahme bei Nichterscheinen.</p>` : ""}
+              <p class="ack-error" id="costerr-${topic.id}" role="alert" hidden>Bitte bestätige auch die Ausfallpauschale bei Nichterscheinen.</p>
+              <input type="text" class="verb-input" id="verb-${topic.id}" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Tippe: VERBINDLICH" aria-label="Zum Bestätigen VERBINDLICH eintippen">
+              <p class="ack-error" id="verberr-${topic.id}" role="alert" hidden>Bitte tippe VERBINDLICH ein, um den Termin fest zuzusagen.</p>` : ""}
               <div class="claim-row">
                 <input type="text" maxlength="60" autocomplete="name" placeholder="Dein Name" aria-label="Dein Name für ${escapeHtml(topic.title)}" id="name-${topic.id}">
                 <button class="btn-secure" type="button" id="claim-${topic.id}" onclick="secureTopic('${topic.id}')">Sichern</button>
@@ -874,6 +947,19 @@
         document.getElementById(`costbox-${id}`).classList.add("missing");
         document.getElementById(`costerr-${id}`).hidden = false;
         if (cost) cost.focus();
+        return;
+      }
+      const verb = document.getElementById(`verb-${id}`);
+      const verbErr = document.getElementById(`verberr-${id}`);
+      if (verbErr) verbErr.hidden = true;
+      if (isFixed && (!verb || verb.value.trim().toUpperCase() !== "VERBINDLICH")) {
+        if (verbErr) verbErr.hidden = false;
+        if (verb) verb.focus();
+        return;
+      }
+
+      if (isFixed && isBlocked(name)) {
+        alert("Du kannst keine festen Termine mehr sichern, weil du einen festen Termin verpasst hast. Bitte melde dich beim Team.");
         return;
       }
 
@@ -922,11 +1008,36 @@
           status: "frei",
           claimedBy: "",
           claimedAt: deleteField(),
-          costAccepted: deleteField()
+          costAccepted: deleteField(),
+          noShow: deleteField()
         });
       } catch (error) {
         console.error(error);
         alert("Das Freigeben hat nicht geklappt.");
+      }
+    };
+
+    const configRef = doc(db, "topics", "_config");
+
+    window.markNoShow = async function (id) {
+      const topic = topics.find((t) => t.id === id);
+      if (!topic || !topic.claimedBy) return;
+      if (!confirm(`${topic.claimedBy} als „nicht erschienen“ markieren und für feste Termine sperren?`)) return;
+      try {
+        await updateDoc(doc(db, "topics", id), { noShow: true });
+        await setDoc(configRef, { type: "config", blockedNames: arrayUnion(topic.claimedBy.trim().toLowerCase()) }, { merge: true });
+      } catch (error) {
+        console.error(error);
+        alert("Das hat nicht geklappt.");
+      }
+    };
+
+    window.unblockName = async function (name) {
+      try {
+        await setDoc(configRef, { type: "config", blockedNames: arrayRemove(name) }, { merge: true });
+      } catch (error) {
+        console.error(error);
+        alert("Das Entsperren hat nicht geklappt.");
       }
     };
 
@@ -960,6 +1071,9 @@
       if (!values.title) return fields.title.focus();
       if (!deadlineAt || isNaN(deadlineAt.getTime())) return deadlineInput.focus();
       if (fixedCheck.checked && (!fixedAt || isNaN(fixedAt.getTime()))) return fixedInput.focus();
+      const penaltyInput = document.getElementById("newPenalty");
+      const penalty = Number(penaltyInput.value);
+      if (fixedCheck.checked && !(penalty > 0)) return penaltyInput.focus();
       if (fixedCheck.checked && !values.address) {
         alert("Bei einem festen Termin bitte die Adresse eintragen.");
         return fields.address.focus();
@@ -978,7 +1092,7 @@
         await addDoc(topicsCol, {
           ...values,
           deadlineAt: Timestamp.fromDate(deadlineAt),
-          ...(fixedAt ? { fixedAt: Timestamp.fromDate(fixedAt) } : {}),
+          ...(fixedAt ? { fixedAt: Timestamp.fromDate(fixedAt), penalty } : {}),
           status: "frei",
           claimedBy: "",
           createdAt: serverTimestamp()
@@ -986,6 +1100,7 @@
         Object.values(fields).forEach((field) => { field.value = ""; });
         deadlineInput.value = "";
         fixedInput.value = "";
+        penaltyInput.value = "";
         fixedCheck.checked = false;
         document.getElementById("fixedWrap").hidden = true;
       } catch (error) {
@@ -1093,7 +1208,9 @@
           <div id="fixedWrap" hidden>
             <label for="newFixedAt">Termin – Datum &amp; Uhrzeit *</label>
             <input type="datetime-local" id="newFixedAt">
-            <p class="lock-note">Beim Sichern müssen Creator zusätzlich bestätigen, dass sie bei Nichterscheinen die Kosten tragen. Bitte unten die Adresse eintragen.</p>
+            <label for="newPenalty">Ausfallpauschale in € *</label>
+            <input type="number" id="newPenalty" min="1" step="1" inputmode="numeric" placeholder="z. B. 150">
+            <p class="lock-note">Faustregel: etwa 20–30 % des Auftragswerts. Der Creator sieht nur die Pauschale, nicht den Auftragswert. Beim Sichern muss er sie bestätigen und VERBINDLICH eintippen. Bitte unten die Adresse eintragen.</p>
           </div>
 
           <label for="newDeadline">Zeitraum – Hinweistext (optional)</label>
@@ -1117,8 +1234,9 @@
             <h4>Alle Themen verwalten</h4>
             ${topics.map((topic) => `
               <div class="admin-list-item">
-                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span>${fixedDate(topic) ? ` <span class="st">· fester Termin ${formatFixed(fixedDate(topic), false)}</span>` : ""}${topic.costAccepted ? ` <span class="st ok">· Kosten bestätigt</span>` : ""}${isExpired(topic) ? ` <span class="st late">· Frist abgelaufen</span>` : ""}</span>
+                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span>${fixedDate(topic) ? ` <span class="st">· fester Termin ${formatFixed(fixedDate(topic), false)}</span>` : ""}${topic.costAccepted ? ` <span class="st ok">· verbindlich zugesagt</span>` : ""}${topic.noShow ? ` <span class="st noshow">· nicht erschienen</span>` : ""}${topic.status === "blockiert" && isBlocked(topic.claimedBy) && !topic.noShow ? ` <span class="st noshow">· hat schon einen Termin verpasst</span>` : ""}${isExpired(topic) ? ` <span class="st late">· Frist abgelaufen</span>` : ""}</span>
                 <span class="admin-actions">
+                  ${topic.status === "blockiert" && fixedDate(topic) && !topic.noShow ? `<button class="icon-btn" type="button" onclick="markNoShow('${topic.id}')">Nicht erschienen</button>` : ""}
                   ${topic.status === "blockiert" ? `<button class="icon-btn" type="button" onclick="releaseTopic('${topic.id}')">Freigeben</button>` : ""}
                   <button class="icon-btn" type="button" onclick="deleteTopic('${topic.id}')">Löschen</button>
                 </span>
@@ -1131,6 +1249,13 @@
                 <input type="datetime-local" id="dl-${topic.id}" aria-label="Upload möglich bis für ${escapeHtml(topic.title)}" value="${toLocalInput(deadlineDate(topic))}">
                 <button class="icon-btn" type="button" onclick="saveDeadline('${topic.id}')">Frist speichern</button>
               </div>`).join("") || `<p class="lock-note">Noch keine Themen vorhanden.</p>`}
+          </div>
+
+          <div class="blocked-list">
+            <h4>Für feste Termine gesperrt</h4>
+            ${blockedNames.length
+              ? blockedNames.map((name) => `<div class="blocked-row"><span>${escapeHtml(name)}</span><button class="icon-btn" type="button" onclick="unblockName('${escapeAttr(name).replace(/'/g, "&#39;")}')">Entsperren</button></div>`).join("")
+              : `<p class="lock-note">Niemand gesperrt.</p>`}
           </div>
         </section>`;
     }
@@ -1315,6 +1440,8 @@
       renderCalList();
     });
 
+    setInterval(updateCountdowns, 30000);
+
     // Sobald eine Frist abläuft, Seite automatisch aktualisieren (ohne Neuladen)
     setInterval(() => {
       if (topics.length && expiredKey() !== lastExpiredKey) renderTopics();
@@ -1327,7 +1454,10 @@
     });
 
     onSnapshot(topicsCol, (snapshot) => {
-      topics = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const all = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      const config = all.find((item) => item.id === "_config");
+      blockedNames = Array.isArray(config?.blockedNames) ? config.blockedNames : [];
+      topics = all.filter((item) => item.id !== "_config");
       topics.sort((a, b) => {
         const aTime = a.createdAt?.seconds || 0;
         const bTime = b.createdAt?.seconds || 0;
