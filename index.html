@@ -140,6 +140,49 @@
     .badge.frei { background: var(--green-bg); color: var(--teal); }
     .badge.blockiert { background: var(--rust-bg); color: var(--rust); }
 
+    /* Auf- und zuklappbare Themen */
+    .topic { padding: 0; overflow: hidden; }
+    .topic-toggle {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 60px;
+      padding: 16px 18px;
+      border-radius: 0;
+      background: none;
+      color: inherit;
+      text-align: left;
+      font-weight: inherit;
+    }
+    .topic-toggle:active { transform: none; background: #FCFAF5; }
+    .topic-toggle:focus-visible { outline: 2px solid var(--amber); outline-offset: -2px; }
+    .topic-toggle h3 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .chevron {
+      flex: none;
+      width: 18px;
+      height: 18px;
+      color: var(--ink-soft);
+      transition: transform .2s ease;
+    }
+    .topic.open .chevron { transform: rotate(180deg); }
+    .topic-body { padding: 0 18px 18px; }
+    .topic-body > .meta:first-child { margin-top: 0; }
+    .topic.unavailable .topic-toggle h3 { color: var(--ink-soft); }
+    .too-late {
+      margin: 4px 0 0;
+      padding: 12px 14px;
+      border-radius: 11px;
+      background: var(--rust-bg);
+      color: var(--rust);
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .claimed-block .too-late { flex-basis: 100%; margin-top: 10px; padding: 0; background: none; }
+    .claimed-block:has(.too-late) { flex-wrap: wrap; }
+    .admin-list-item .st.late { color: #F4B2AC; }
+    @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
+
     .meta {
       display: grid;
       gap: 7px;
@@ -372,7 +415,8 @@
     @media (max-width: 430px) {
       .claim-row { flex-direction: column; }
       .btn-secure { width: 100%; }
-      .topic { padding: 16px; }
+      .topic-toggle { padding: 14px 16px; }
+      .topic-body { padding: 0 16px 16px; }
     }
   </style>
 </head>
@@ -395,7 +439,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import {
       getFirestore, collection, onSnapshot, addDoc, updateDoc, deleteDoc,
-      doc, serverTimestamp, runTransaction, deleteField
+      doc, serverTimestamp, runTransaction, deleteField, Timestamp
     } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
     import {
       getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -419,6 +463,51 @@
 
     let topics = [];
     let adminUnlocked = false;
+    const openTopics = new Set();
+    let lastExpiredKey = "";
+
+    // Frist (Datum + Uhrzeit), ab der kein Upload mehr möglich ist
+    function deadlineDate(topic) {
+      const value = topic.deadlineAt;
+      if (!value) return null;
+      const date = typeof value.toDate === "function" ? value.toDate() : new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    }
+
+    function isExpired(topic) {
+      const date = deadlineDate(topic);
+      return !!date && Date.now() >= date.getTime();
+    }
+
+    function isAvailable(topic) {
+      return topic.status !== "blockiert" && !isExpired(topic);
+    }
+
+    function formatDeadline(date) {
+      return date.toLocaleString("de-DE", {
+        weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+      }) + " Uhr";
+    }
+
+    function deadlineLabel(topic) {
+      const date = deadlineDate(topic);
+      const exact = date ? `bis ${formatDeadline(date)}` : "";
+      if (topic.deadline && exact) return `${topic.deadline} (${exact})`;
+      return topic.deadline || exact;
+    }
+
+    function toLocalInput(date) {
+      if (!date) return "";
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function expiredKey() {
+      return topics.filter(isExpired).map((topic) => topic.id).join(",");
+    }
+
+    const TOO_LATE = `<p class="too-late" role="status">Leider zu spät – die Frist ist abgelaufen.</p>`;
+    const CHEVRON = `<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`;
 
     function escapeHtml(value) {
       const element = document.createElement("div");
@@ -438,8 +527,9 @@
 
     function formatTopicMeta(topic) {
       const rows = [];
-      if (topic.deadline) {
-        rows.push(`<div class="meta-row"><span class="meta-icon">⏱</span><span><strong>Zeitraum:</strong> ${escapeHtml(topic.deadline)}</span></div>`);
+      const label = deadlineLabel(topic);
+      if (label) {
+        rows.push(`<div class="meta-row"><span class="meta-icon">⏱</span><span><strong>Frist:</strong> ${escapeHtml(label)}</span></div>`);
       }
       if (topic.storeName) {
         rows.push(`<div class="meta-row"><span class="meta-icon">🏪</span><span><strong>Laden:</strong> ${escapeHtml(topic.storeName)}</span></div>`);
@@ -466,14 +556,26 @@
     const DROPBOX_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M6 2 0 6l6 4 6-4zm12 0-6 4 6 4 6-4zM0 14l6 4 6-4-6-4zm18-4-6 4 6 4 6-4zM6 19.3 12 23l6-3.7-6-3.9z"/></svg>`;
 
     function uploadBlock(topic) {
+      if (isExpired(topic)) return TOO_LATE;
       const url = safeUrl(topic.dropboxUrl);
       if (!url) return "";
+      const label = deadlineLabel(topic);
       return `
         <div class="upload">
           <a class="btn-dropbox" href="${escapeAttr(url)}" target="_blank" rel="noopener">${DROPBOX_ICON}Video in Dropbox hochladen</a>
-          ${topic.deadline ? `<p class="upload-note">Bitte bis zur Frist hochladen: ${escapeHtml(topic.deadline)}</p>` : ""}
+          ${label ? `<p class="upload-note">Bitte bis zur Frist hochladen: ${escapeHtml(label)}</p>` : ""}
         </div>`;
     }
+
+    window.toggleTopic = function (id) {
+      const open = !openTopics.has(id);
+      if (open) openTopics.add(id); else openTopics.delete(id);
+      const article = document.getElementById(`topic-${id}`);
+      if (!article) return;
+      article.classList.toggle("open", open);
+      article.querySelector(".topic-toggle").setAttribute("aria-expanded", String(open));
+      document.getElementById(`body-${id}`).hidden = !open;
+    };
 
     window.clearAck = function (id) {
       const box = document.getElementById(`ackbox-${id}`);
@@ -492,36 +594,53 @@
       }
 
       element.className = "";
+      lastExpiredKey = expiredKey();
       element.innerHTML = topics.map((topic) => {
-        const common = `
-          <div class="topic-top">
-            <h3>${escapeHtml(topic.title)}</h3>
-            <span class="badge ${topic.status === "blockiert" ? "blockiert" : "frei"}">${topic.status === "blockiert" ? "Vergeben" : "Frei"}</span>
-          </div>
+        const available = isAvailable(topic);
+        const open = openTopics.has(topic.id);
+        const details = `
           ${formatTopicMeta(topic)}
           ${topic.scriptText ? `<p class="script-label">Das sollst du sagen</p><p class="script-text">${escapeHtml(topic.scriptText)}</p>` : ""}`;
 
+        let action;
         if (topic.status === "blockiert") {
-          return `<article class="topic">${common}<div class="claimed-block"><div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div>${uploadBlock(topic)}</div></article>`;
+          action = `<div class="claimed-block"><div class="stamp">Gesichert von <b>${escapeHtml(topic.claimedBy)}</b></div>${uploadBlock(topic)}</div>`;
+        } else if (isExpired(topic)) {
+          action = TOO_LATE;
+        } else {
+          action = claimForm(topic);
         }
 
         return `
-          <article class="topic">
-            ${common}
+          <article class="topic ${open ? "open" : ""} ${available ? "" : "unavailable"}" id="topic-${topic.id}">
+            <button class="topic-toggle" type="button" aria-expanded="${open}" aria-controls="body-${topic.id}" onclick="toggleTopic('${topic.id}')">
+              <h3>${escapeHtml(topic.title)}</h3>
+              <span class="badge ${available ? "frei" : "blockiert"}">${available ? "Frei" : "Nicht verfügbar"}</span>
+              ${CHEVRON}
+            </button>
+            <div class="topic-body" id="body-${topic.id}" ${open ? "" : "hidden"}>
+              ${details}
+              ${action}
+            </div>
+          </article>`;
+      }).join("");
+      renderAdmin();
+    }
+
+    function claimForm(topic) {
+      const label = deadlineLabel(topic);
+      return `
             <div class="claim-form">
               <label class="ack" id="ackbox-${topic.id}" for="ack-${topic.id}">
                 <input type="checkbox" id="ack-${topic.id}" onchange="clearAck('${topic.id}')">
-                <span>Ich habe zur Kenntnis genommen, dass ich das Video bis zum angegebenen Zeitpunkt hochladen werde.${topic.deadline ? `<span class="ack-deadline">Frist: ${escapeHtml(topic.deadline)}</span>` : ""}</span>
+                <span>Ich habe zur Kenntnis genommen, dass ich das Video bis zum angegebenen Zeitpunkt hochladen werde.${label ? `<span class="ack-deadline">Frist: ${escapeHtml(label)}</span>` : ""}</span>
               </label>
               <p class="ack-error" id="ackerr-${topic.id}" role="alert" hidden>Bitte bestätige zuerst, dass du das Video rechtzeitig hochlädst.</p>
               <div class="claim-row">
                 <input type="text" maxlength="60" autocomplete="name" placeholder="Dein Name" aria-label="Dein Name für ${escapeHtml(topic.title)}" id="name-${topic.id}">
                 <button class="btn-secure" type="button" id="claim-${topic.id}" onclick="secureTopic('${topic.id}')">Sichern</button>
               </div>
-            </div>
-          </article>`;
-      }).join("");
-      renderAdmin();
+            </div>`;
     }
 
     window.secureTopic = async function (id) {
@@ -553,6 +672,9 @@
           if (!snapshot.exists() || snapshot.data().status !== "frei") {
             throw new Error("already-claimed");
           }
+          if (isExpired(snapshot.data())) {
+            throw new Error("too-late");
+          }
           transaction.update(topicRef, {
             status: "blockiert",
             claimedBy: name,
@@ -563,6 +685,10 @@
         console.error(error);
         if (error.message === "already-claimed") {
           alert("Dieses Thema wurde gerade von jemand anderem gesichert.");
+        } else if (error.message === "too-late") {
+          alert("Leider zu spät – die Frist für dieses Thema ist abgelaufen.");
+          renderTopics();
+          return;
         } else {
           alert("Das Sichern hat nicht geklappt. Bitte versuche es erneut.");
         }
@@ -604,9 +730,11 @@
         dropboxUrl: document.getElementById("newDropbox")
       };
       const values = Object.fromEntries(Object.entries(fields).map(([key, element]) => [key, element.value.trim()]));
+      const deadlineInput = document.getElementById("newDeadlineAt");
+      const deadlineAt = deadlineInput.value ? new Date(deadlineInput.value) : null;
 
       if (!values.title) return fields.title.focus();
-      if (!values.deadline) return fields.deadline.focus();
+      if (!deadlineAt || isNaN(deadlineAt.getTime())) return deadlineInput.focus();
       if (!values.scriptText) return fields.scriptText.focus();
       if (values.dropboxUrl && !safeUrl(values.dropboxUrl)) {
         alert("Der Dropbox-Link muss mit https:// beginnen.");
@@ -620,11 +748,13 @@
       try {
         await addDoc(topicsCol, {
           ...values,
+          deadlineAt: Timestamp.fromDate(deadlineAt),
           status: "frei",
           claimedBy: "",
           createdAt: serverTimestamp()
         });
         Object.values(fields).forEach((field) => { field.value = ""; });
+        deadlineInput.value = "";
       } catch (error) {
         console.error(error);
         alert("Das Thema konnte nicht angelegt werden.");
@@ -648,6 +778,20 @@
       } catch (error) {
         console.error(error);
         alert("Der Link konnte nicht gespeichert werden.");
+      }
+    };
+
+    window.saveDeadline = async function (id) {
+      const input = document.getElementById(`dl-${id}`);
+      const date = input.value ? new Date(input.value) : null;
+      if (date && isNaN(date.getTime())) return input.focus();
+      try {
+        await updateDoc(doc(db, "topics", id), { deadlineAt: date ? Timestamp.fromDate(date) : deleteField() });
+        input.style.outline = "2px solid #6FCF97";
+        setTimeout(() => { input.style.outline = ""; }, 1200);
+      } catch (error) {
+        console.error(error);
+        alert("Die Frist konnte nicht gespeichert werden.");
       }
     };
 
@@ -706,8 +850,11 @@
           <label for="newTitle">Titel *</label>
           <input type="text" id="newTitle" maxlength="120" placeholder="Titel des Themas">
 
-          <label for="newDeadline">Zeitraum / Frist *</label>
-          <input type="text" id="newDeadline" maxlength="120" placeholder="z. B. heute bis 16:00 Uhr">
+          <label for="newDeadlineAt">Upload möglich bis (Datum &amp; Uhrzeit) *</label>
+          <input type="datetime-local" id="newDeadlineAt">
+
+          <label for="newDeadline">Zeitraum – Hinweistext (optional)</label>
+          <input type="text" id="newDeadline" maxlength="120" placeholder="z. B. heute zwischen 12 und 16 Uhr">
 
           <label for="newScript">Text, der gesagt werden soll *</label>
           <textarea id="newScript" maxlength="1500" placeholder="Sprechtext eingeben"></textarea>
@@ -727,7 +874,7 @@
             <h4>Alle Themen verwalten</h4>
             ${topics.map((topic) => `
               <div class="admin-list-item">
-                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span></span>
+                <span>${escapeHtml(topic.title)} <span class="st">· ${topic.status === "blockiert" ? escapeHtml(topic.claimedBy) : "frei"}</span>${isExpired(topic) ? ` <span class="st late">· Frist abgelaufen</span>` : ""}</span>
                 <span class="admin-actions">
                   ${topic.status === "blockiert" ? `<button class="icon-btn" type="button" onclick="releaseTopic('${topic.id}')">Freigeben</button>` : ""}
                   <button class="icon-btn" type="button" onclick="deleteTopic('${topic.id}')">Löschen</button>
@@ -736,6 +883,10 @@
               <div class="link-edit">
                 <input type="url" id="dbx-${topic.id}" maxlength="500" inputmode="url" autocapitalize="off" aria-label="Dropbox-Link für ${escapeHtml(topic.title)}" placeholder="Dropbox-Link einfügen" value="${escapeAttr(topic.dropboxUrl || "")}">
                 <button class="icon-btn" type="button" onclick="saveDropbox('${topic.id}')">Link speichern</button>
+              </div>
+              <div class="link-edit">
+                <input type="datetime-local" id="dl-${topic.id}" aria-label="Upload möglich bis für ${escapeHtml(topic.title)}" value="${toLocalInput(deadlineDate(topic))}">
+                <button class="icon-btn" type="button" onclick="saveDeadline('${topic.id}')">Frist speichern</button>
               </div>`).join("") || `<p class="lock-note">Noch keine Themen vorhanden.</p>`}
           </div>
         </section>`;
@@ -748,6 +899,11 @@
       button.setAttribute("aria-expanded", String(!panel.hidden));
       if (!panel.hidden) renderAdmin();
     });
+
+    // Sobald eine Frist abläuft, Seite automatisch aktualisieren (ohne Neuladen)
+    setInterval(() => {
+      if (topics.length && expiredKey() !== lastExpiredKey) renderTopics();
+    }, 15000);
 
     onAuthStateChanged(auth, (user) => {
       adminUnlocked = user?.email?.toLowerCase() === ADMIN_EMAIL;
