@@ -183,6 +183,90 @@
     .admin-list-item .st.late { color: #F4B2AC; }
     @media (prefers-reduced-motion: reduce) { .chevron { transition: none; } }
 
+    /* Tabs */
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      margin-bottom: 18px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--surface);
+    }
+    .tab {
+      min-height: 44px;
+      border-radius: 10px;
+      background: none;
+      color: var(--ink-soft);
+      font-size: 15px;
+    }
+    .tab[aria-selected="true"] { background: var(--teal); color: #F4EFE4; }
+    .tab:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+    /* Kalender */
+    .cal-card {
+      margin-bottom: 14px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .cal-intro { margin: 0 0 14px; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+    .cal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+    .cal-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
+    .cal-nav {
+      display: grid; place-items: center;
+      width: 44px; min-height: 44px; padding: 0;
+      border-radius: 11px; background: var(--bg); color: var(--teal);
+    }
+    .cal-nav svg { width: 20px; height: 20px; }
+    .cal-nav:disabled { opacity: .3; cursor: default; }
+    .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    .cal-weekdays span { padding: 4px 0; color: var(--ink-soft); font-size: 12px; font-weight: 700; text-align: center; }
+    .cal-day {
+      position: relative;
+      display: grid; place-items: center;
+      aspect-ratio: 1;
+      min-height: 44px; padding: 0;
+      border-radius: 11px;
+      background: none; color: var(--ink);
+      font-size: 15px; font-weight: 600;
+    }
+    .cal-day:hover:not(:disabled) { background: var(--bg); }
+    .cal-day.today { box-shadow: inset 0 0 0 1.5px var(--amber); }
+    .cal-day.selected { background: var(--teal); color: #F4EFE4; }
+    .cal-day:disabled { color: #C9BFB1; cursor: default; font-weight: 500; }
+    .cal-day:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+    .cal-day .count {
+      position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%);
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 999px; background: var(--amber); color: #3A2508;
+      font-size: 10px; font-weight: 700; line-height: 16px;
+    }
+    .cal-day.has-entries { padding-bottom: 12px; }
+    .cal-legend { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: var(--ink-soft); font-size: 12.5px; }
+    .cal-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); }
+    .cal-day-title { margin: 0 0 12px; font-size: 19px; font-weight: 600; }
+    .cal-entry {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 8px; padding: 11px 12px;
+      border-radius: 11px; background: var(--green-bg);
+      font-size: 14px; line-height: 1.4;
+    }
+    .cal-entry b { color: var(--teal-dark); }
+    .cal-entry .time { color: var(--teal); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cal-entry .note { display: block; color: var(--ink-soft); font-size: 13px; overflow-wrap: anywhere; }
+    .cal-entry .del { min-height: 36px; padding: 4px 8px; background: none; color: var(--rust); font-size: 12px; text-decoration: underline; }
+    .cal-empty { margin: 0 0 4px; color: var(--ink-soft); font-size: 14px; }
+    .cal-form { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .cal-form label { display: block; margin: 10px 0 5px; color: var(--ink-soft); font-size: 12.5px; font-weight: 700; }
+    .cal-form label:first-child { margin-top: 0; }
+    .cal-times { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .cal-error { min-height: 18px; margin: 8px 0 0; color: var(--rust); font-size: 13px; }
+    .cal-submit { width: 100%; margin-top: 4px; }
+
     .meta {
       display: grid;
       gap: 7px;
@@ -429,7 +513,55 @@
     </header>
 
     <main>
-      <div id="topics" class="loading" aria-live="polite">Themen werden geladen …</div>
+      <div class="tabs" role="tablist" aria-label="Bereiche">
+        <button class="tab" role="tab" id="tab-topics" aria-selected="true" aria-controls="view-topics" type="button" onclick="showView('topics')">Themen</button>
+        <button class="tab" role="tab" id="tab-cal" aria-selected="false" aria-controls="view-cal" type="button" onclick="showView('cal')">Drehzeiten</button>
+      </div>
+
+      <section id="view-topics" role="tabpanel" aria-labelledby="tab-topics">
+        <div id="topics" class="loading" aria-live="polite">Themen werden geladen …</div>
+      </section>
+
+      <section id="view-cal" role="tabpanel" aria-labelledby="tab-cal" hidden>
+        <div class="cal-card">
+          <p class="cal-intro">Trag ein, wann du Zeit zum Drehen hast. So können wir dir passende Themen zuteilen.</p>
+          <div class="cal-head">
+            <button class="cal-nav" id="calPrev" type="button" aria-label="Vorheriger Monat" onclick="moveMonth(-1)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <h2 id="calMonth" aria-live="polite"></h2>
+            <button class="cal-nav" type="button" aria-label="Nächster Monat" onclick="moveMonth(1)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+          <div class="cal-weekdays" aria-hidden="true"><span>Mo</span><span>Di</span><span>Mi</span><span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+          <div class="cal-grid" id="calGrid"></div>
+          <p class="cal-legend"><span class="cal-dot"></span> Jemand hat an diesem Tag Zeit</p>
+        </div>
+
+        <div class="cal-card">
+          <h3 class="cal-day-title" id="calDayTitle"></h3>
+          <div id="calList" aria-live="polite"></div>
+          <div class="cal-form">
+            <label for="calName">Dein Name *</label>
+            <input type="text" id="calName" maxlength="60" autocomplete="name" placeholder="Dein Name">
+            <div class="cal-times">
+              <div>
+                <label for="calFrom">Von *</label>
+                <input type="time" id="calFrom" value="10:00">
+              </div>
+              <div>
+                <label for="calTo">Bis *</label>
+                <input type="time" id="calTo" value="14:00">
+              </div>
+            </div>
+            <label for="calNote">Notiz (optional)</label>
+            <input type="text" id="calNote" maxlength="200" placeholder="z. B. nur in Kreuzberg, mit Auto">
+            <p class="cal-error" id="calError" role="alert"></p>
+            <button class="btn-secure cal-submit" id="calSubmit" type="button" onclick="addAvailability()">Eintragen</button>
+          </div>
+        </div>
+      </section>
       <button class="admin-toggle" id="adminToggleBtn" type="button" aria-expanded="false">Backoffice</button>
       <div id="adminPanel" hidden></div>
     </main>
@@ -900,6 +1032,173 @@
       if (!panel.hidden) renderAdmin();
     });
 
+    // ---------- Tabs ----------
+    window.showView = function (view) {
+      const isCal = view === "cal";
+      document.getElementById("view-topics").hidden = isCal;
+      document.getElementById("view-cal").hidden = !isCal;
+      document.getElementById("tab-topics").setAttribute("aria-selected", String(!isCal));
+      document.getElementById("tab-cal").setAttribute("aria-selected", String(isCal));
+      try { history.replaceState(null, "", isCal ? "#drehzeiten" : location.pathname + location.search); } catch (e) {}
+    };
+
+    // ---------- Kalender „Drehzeiten“ ----------
+    const availCol = collection(db, "availability");
+    let availability = [];
+    let calError = "";
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    let viewMonth = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+    let selectedDay = dayKey(todayStart);
+
+    function dayKey(date) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    }
+
+    function keyToDate(key) {
+      const [y, m, d] = key.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    }
+
+    function entriesFor(key) {
+      return availability
+        .filter((entry) => entry.date === key)
+        .sort((a, b) => (a.from || "").localeCompare(b.from || ""));
+    }
+
+    window.moveMonth = function (step) {
+      const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + step, 1);
+      if (next < new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)) return;
+      viewMonth = next;
+      renderCalGrid();
+    };
+
+    window.selectDay = function (key) {
+      selectedDay = key;
+      renderCalGrid();
+      renderCalList();
+      document.getElementById("calError").textContent = "";
+    };
+
+    function renderCalGrid() {
+      const grid = document.getElementById("calGrid");
+      const year = viewMonth.getFullYear();
+      const month = viewMonth.getMonth();
+      document.getElementById("calMonth").textContent =
+        viewMonth.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+      document.getElementById("calPrev").disabled =
+        year === todayStart.getFullYear() && month === todayStart.getMonth();
+
+      const offset = (new Date(year, month, 1).getDay() + 6) % 7; // Montag zuerst
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const todayKey = dayKey(todayStart);
+      let html = "<span></span>".repeat(offset);
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const key = dayKey(date);
+        const past = date < todayStart;
+        const count = entriesFor(key).length;
+        const classes = ["cal-day"];
+        if (key === todayKey) classes.push("today");
+        if (key === selectedDay) classes.push("selected");
+        if (count && !past) classes.push("has-entries");
+        const label = date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" })
+          + (count ? `, ${count} ${count === 1 ? "Eintrag" : "Einträge"}` : "");
+        html += `<button type="button" class="${classes.join(" ")}" ${past ? "disabled" : ""}
+          aria-label="${label}" aria-pressed="${key === selectedDay}" onclick="selectDay('${key}')">
+          ${day}${count && !past ? `<span class="count" aria-hidden="true">${count}</span>` : ""}</button>`;
+      }
+      grid.innerHTML = html;
+    }
+
+    function renderCalList() {
+      const date = keyToDate(selectedDay);
+      document.getElementById("calDayTitle").textContent =
+        date.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+      const list = document.getElementById("calList");
+
+      if (calError) {
+        list.innerHTML = `<p class="cal-empty">${escapeHtml(calError)}</p>`;
+        return;
+      }
+
+      const entries = entriesFor(selectedDay);
+      list.innerHTML = entries.length
+        ? entries.map((entry) => `
+            <div class="cal-entry">
+              <span><b>${escapeHtml(entry.name)}</b>${entry.note ? `<span class="note">${escapeHtml(entry.note)}</span>` : ""}</span>
+              <span>
+                <span class="time">${escapeHtml(entry.from)}–${escapeHtml(entry.to)}</span>
+                ${adminUnlocked ? `<button class="del" type="button" onclick="deleteAvailability('${entry.id}')">Löschen</button>` : ""}
+              </span>
+            </div>`).join("")
+        : `<p class="cal-empty">Noch niemand eingetragen – sei die/der Erste.</p>`;
+    }
+
+    window.addAvailability = async function () {
+      const nameEl = document.getElementById("calName");
+      const fromEl = document.getElementById("calFrom");
+      const toEl = document.getElementById("calTo");
+      const noteEl = document.getElementById("calNote");
+      const errorEl = document.getElementById("calError");
+      const button = document.getElementById("calSubmit");
+      const name = nameEl.value.trim();
+      const from = fromEl.value;
+      const to = toEl.value;
+      const note = noteEl.value.trim();
+      errorEl.textContent = "";
+
+      if (name.length < 2) { errorEl.textContent = "Bitte gib deinen Namen ein."; return nameEl.focus(); }
+      if (!/^\d{2}:\d{2}$/.test(from)) { errorEl.textContent = "Bitte eine Startzeit wählen."; return fromEl.focus(); }
+      if (!/^\d{2}:\d{2}$/.test(to) || to <= from) { errorEl.textContent = "Die Endzeit muss nach der Startzeit liegen."; return toEl.focus(); }
+      if (keyToDate(selectedDay) < todayStart) { errorEl.textContent = "Dieser Tag liegt in der Vergangenheit."; return; }
+
+      button.disabled = true;
+      button.textContent = "Wird eingetragen …";
+      try {
+        await addDoc(availCol, { name, date: selectedDay, from, to, note, createdAt: serverTimestamp() });
+        noteEl.value = "";
+        try { localStorage.setItem("beguna-name", name); } catch (e) {}
+      } catch (error) {
+        console.error(error);
+        errorEl.textContent = "Das Eintragen hat nicht geklappt. Bitte versuche es erneut.";
+      } finally {
+        button.disabled = false;
+        button.textContent = "Eintragen";
+      }
+    };
+
+    window.deleteAvailability = async function (id) {
+      if (!confirm("Diesen Eintrag löschen?")) return;
+      try {
+        await deleteDoc(doc(db, "availability", id));
+      } catch (error) {
+        console.error(error);
+        alert("Der Eintrag konnte nicht gelöscht werden.");
+      }
+    };
+
+    try {
+      const savedName = localStorage.getItem("beguna-name");
+      if (savedName) document.getElementById("calName").value = savedName;
+    } catch (e) {}
+
+    renderCalGrid();
+    renderCalList();
+    if (location.hash === "#drehzeiten") window.showView("cal");
+
+    onSnapshot(availCol, (snapshot) => {
+      calError = "";
+      availability = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+      renderCalGrid();
+      renderCalList();
+    }, (error) => {
+      console.error(error);
+      calError = "Der Kalender ist noch nicht freigeschaltet. Bitte die Firestore-Regeln aktualisieren.";
+      renderCalList();
+    });
+
     // Sobald eine Frist abläuft, Seite automatisch aktualisieren (ohne Neuladen)
     setInterval(() => {
       if (topics.length && expiredKey() !== lastExpiredKey) renderTopics();
@@ -908,6 +1207,7 @@
     onAuthStateChanged(auth, (user) => {
       adminUnlocked = user?.email?.toLowerCase() === ADMIN_EMAIL;
       renderAdmin();
+      renderCalList();
     });
 
     onSnapshot(topicsCol, (snapshot) => {
